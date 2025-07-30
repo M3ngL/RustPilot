@@ -9,6 +9,8 @@ mod param;
 mod gazebo_sim;
 #[cfg(feature = "gzsim")]
 mod gazebo_actuator;
+#[cfg(feature = "mujoco")]
+mod mujoco_sim;
 
 mod fake_linux_input;
 mod att_control;
