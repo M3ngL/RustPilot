@@ -11,6 +11,9 @@ mod gazebo_sim;
 mod gazebo_actuator;
 #[cfg(feature = "mujoco")]
 mod mujoco_sim;
+// #[cfg(feature = "mujoco")]
+// mod mujoco_camera;
+
 
 mod fake_linux_input;
 mod att_control;
