@@ -31,11 +31,11 @@
             "ctrl_group_id": 0,
             "ctrl_channel": "ThrustZ",
             "scaler": {
-              "scale_p": 1000,
-              "scale_n": 1000,
+              "scale_p": 10,
+              "scale_n": 10,
               "offset": 0,
               "min": 0,
-              "max": 1000
+              "max": 10
             }
           }
         ]
@@ -71,11 +71,11 @@
             "ctrl_group_id": 0,
             "ctrl_channel": "ThrustZ",
             "scaler": {
-              "scale_p": 1000,
-              "scale_n": 1000,
+              "scale_p": 10,
+              "scale_n": 10,
               "offset": 0,
               "min": 0,
-              "max": 1000
+              "max": 10
             }
           }
         ]
@@ -111,11 +111,11 @@
             "ctrl_group_id": 0,
             "ctrl_channel": "ThrustZ",
             "scaler": {
-              "scale_p": 1000,
-              "scale_n": 1000,
+              "scale_p": 10,
+              "scale_n": 10,
               "offset": 0,
               "min": 0,
-              "max": 1000
+              "max": 10
             }
           }
         ]
@@ -151,11 +151,11 @@
             "ctrl_group_id": 0,
             "ctrl_channel": "ThrustZ",
             "scaler": {
-              "scale_p": 1000,
-              "scale_n": 1000,
+              "scale_p": 10,
+              "scale_n": 10,
               "offset": 0,
               "min": 0,
-              "max": 1000
+              "max": 10
             }
           }
         ]
