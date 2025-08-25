@@ -1,5 +1,5 @@
-#![feature(trait_upcasting)]
-#![feature(once_cell_get_mut)]
+// #![feature(trait_upcasting)]
+// #![feature(once_cell_get_mut)]
 
 mod msg_define;
 mod param;
@@ -13,7 +13,8 @@ mod gazebo_actuator;
 mod mujoco_sim;
 // #[cfg(feature = "mujoco")]
 // mod mujoco_camera;
-
+#[cfg(feature = "mujoco")]
+mod mujoco_ui;
 
 mod fake_linux_input;
 mod att_control;
@@ -32,6 +33,7 @@ use rpos::libc;
 
 use clap::Parser;
 use rpos::server_client::{server_init, Client};
+
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None, arg_required_else_help(true))]
@@ -52,20 +54,23 @@ fn main() {
     let cli = Cli::parse();
 
     const SOCKET_PATH: &str = "./rpsocket";
-    unsafe {assert_eq!(libc::mlockall(1 | 2),0)};
-    if cli.server{
+    // unsafe {assert_eq!(libc::mlockall(1 | 2),0)};
+
+    if cli.server {
         let hello_txt = r"
         ____                    __     ____     _     __          __
         / __ \  __  __   _____  / /_   / __ \   (_)   / /  ____   / /_
        / /_/ / / / / /  / ___/ / __/  / /_/ /  / /   / /  / __ \ / __/
       / _, _/ / /_/ /  (__  ) / /_   / ____/  / /   / /  / /_/ // /_
      /_/ |_|  \__,_/  /____/  \__/  /_/      /_/   /_/   \____/ \__/";  // slant
+        
         println!("{}",hello_txt);
+    
+
         server_init(SOCKET_PATH).unwrap();
-    }else{
+    } else {
         let mut client = Client::new(SOCKET_PATH).unwrap();
         client.send_str(cli.other.unwrap().join(" ").as_str());
         client.block_read();
     }
-
 }

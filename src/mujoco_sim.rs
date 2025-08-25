@@ -3,20 +3,18 @@ use crate::basic::rotation::Rotation;
 use core::slice;
 use rpos::channel::Sender;
 use rpos::ctor::ctor;
-use rpos::hrt::Timespec;
 use rpos::module::Module;
 use rpos::msg::{get_new_tx_of_message, get_new_rx_of_message};
 use std::sync::Arc;
-// use std::{cell::RefCell, sync::Arc, time::Duration};
 
 use std::sync::mpsc;
 use std::thread;
-use std::time::Duration;
+use std::ptr;
 
-
-use mujoco_rs_sys::no_render::*;
+use mujoco_rust::Simulation;
+use mujoco_rs_sys::render::*;
+use crate::mujoco_ui;
 // use crate::mujoco_camera;
-
 
 unsafe impl Send for MujocoSim {}
 unsafe impl Sync for MujocoSim {}
@@ -75,10 +73,7 @@ impl MujocoSim{
             ],
         );
         let imu_q = rotation.rotate_q(imu_q);
-        /*
-        imu_q is the rotate quaternion from gazebo axis to body axis 
-        rotate_q is the rotate quaternion from gazebo axis to world axis(our defination): x -> -y_old ,  y -> x_old. 
-        */
+
         self.attitude_tx.send(Vector4 {
             w: imu_q.0,
             x: imu_q.1[0],
@@ -87,65 +82,54 @@ impl MujocoSim{
         });
 
     }
-    pub fn detect_movement_and_heading(sim: &Arc<MujocoSim>, last_qpos: Vec<f64>) -> (bool, bool) {
-        let qpos = sim.simulation.qpos();
-        // 假设 qpos[0], qpos[1], qpos[2] 是 x, y, z 位置
-        // qpos[3], qpos[4], qpos[5], qpos[6] 是四元数（朝向）
-        let dx = qpos[0] - last_qpos[0];
-        let dy = qpos[1] - last_qpos[1];
-        let dz = qpos[2] - last_qpos[2]; // 加上 Z 轴
-        let pos_change = (dx * dx + dy * dy + dz * dz).sqrt();
-        let pos_changed = pos_change > 1e-4;
-        let current_quat = &qpos[3..7];
-        let last_quat = &last_qpos[3..7];
-
-        // 计算两个四元数的点积
-        let dot_product: f64 = current_quat.iter().zip(last_quat.iter()).map(|(a, b)| a * b).sum();
-
-        // 如果点积的绝对值非常接近 1.0，则认为朝向没有变化
-        let heading_changed = (1.0 - dot_product.abs()) > 1e-4;
-        (pos_changed, heading_changed)
-    }
 
     pub fn mujoco_sim_event_loop(sim: Arc<MujocoSim>, actuator_num: usize) {
-      // 获取mixer_output的Receiver
         let mut mixer_rx = get_new_rx_of_message::<MixerOutputMsg>("mixer_output").unwrap();
         
-        let mut ctrl = vec![0.0; actuator_num as usize];
+        let mut ctrl: Vec<f64> = vec![0.0; actuator_num as usize];
         let mut i = 0;
 
-        // let (mut vopt, mut cam, mut scene, mut context) = mujoco_camera::init_camera(&sim.simulation, 200, 400);
+        let (mut cam, mut opt, mut scn, mut con, mut window) = mujoco_ui::init_glfw(&sim.simulation);
+
+        // distance between view and model
+        cam.distance = 10.0;
+
+        // vedio streaming test
+        // let (mut VS_vopt, mut VS_cam, mut VS_scene, mut VS_context) = mujoco_camera::init_camera(&sim.simulation, 200, 400);
         
+        sim.simulation.control(&ctrl);
         loop {
             i += 1;
-            // 1. 应用最新的mixer_output到ctrl
             if let Some(mixer) = mixer_rx.try_read() {
                 for (i, val) in mixer.output.iter().enumerate() {
                     if i < ctrl.len() {
                         ctrl[i] = *val as f64;
                     }
                 }
+                println!("mixer_output {:?}", ctrl);
             }
-            // println!("mixer_output: {:?}", ctrl);
             let ctrl_f64: Vec<f64> = ctrl.iter().map(|&x| x as f64).collect();
 
-            println!("ctrl:{:?}", ctrl_f64);
+            sim.simulation.control(&ctrl);
+
             // 2. 推进仿真一步
-            sim.simulation.control(&ctrl_f64);
             sim.simulation.step();
 
             let pos = sim.simulation.qpos(); 
-            // detect_movement_and_heading(sim, pos);
-            println!("Position Changed?: {:?}", MujocoSim::detect_movement_and_heading(&sim, pos));
             sim.update_mj_sensor();
-            
-            // mujoco_camera::get_camera_jpg(&sim.simulation, 200, 400, &mut vopt, &mut cam, &mut scene, &mut context);
+
+            // if i == 100 {
+            //     mujoco_camera::get_camera_jpg(&sim.simulation, 200, 400, &mut VS_vopt, &mut VS_cam, &mut VS_scene, &mut VS_context);
+            // }
+
+            mujoco_ui::update_Mjscene(&sim.simulation, &mut window, &mut cam, &mut opt, &mut scn, &mut con);
 
             // 控制时间步长
             std::thread::sleep(std::time::Duration::from_millis(10));
             
         }
     }
+
 
     fn new(xml_filename: &str) -> Arc<Self> {
         let model = mujoco_rust::Model::from_xml(xml_filename).unwrap();
@@ -172,12 +156,13 @@ pub fn init_mujoco_sim(_argc: u32, _argv: *const &str){
     let argv = unsafe { slice::from_raw_parts(_argv, _argc as usize) };
     let sim = MujocoSim::new(argv[1]);
     let actuator_num = unsafe { (*sim.simulation.model.ptr()).nu as usize};
+    
+    println!("MujocoSim inited!");
 
     std::thread::spawn(move || {
         MujocoSim::mujoco_sim_event_loop(sim, actuator_num);
     });
     
-    println!("MujocoSim inited!");
 }
 
 
