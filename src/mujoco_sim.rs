@@ -13,8 +13,9 @@ use std::ptr;
 
 use mujoco_rust::Simulation;
 use mujoco_rs_sys::render::*;
+use std::io::Write;
 use crate::mujoco_ui;
-// use crate::mujoco_camera;
+use crate::mujoco_vedio_streaming;
 
 unsafe impl Send for MujocoSim {}
 unsafe impl Sync for MujocoSim {}
@@ -89,14 +90,18 @@ impl MujocoSim{
         let mut ctrl: Vec<f64> = vec![0.0; actuator_num as usize];
         let mut i = 0;
 
-        let (mut cam, mut opt, mut scn, mut con, mut window) = mujoco_ui::init_glfw(&sim.simulation);
+        // ui
+        // let (mut cam, mut opt, mut scn, mut con, mut window) = mujoco_ui::init_glfw(&sim.simulation);
+
+
+        // vedio streaming
+        let mut ffmpeg = mujoco_vedio_streaming::init_ffmpeg();
+        let mut stdin = ffmpeg.stdin.take().unwrap(); // Take the stdin handle
+        let (mut window, mut VS_cam, mut VS_vopt, mut VS_scene, mut VS_context) = mujoco_vedio_streaming::init_glfw(&sim.simulation);
 
         // distance between view and model
-        cam.distance = 10.0;
+        VS_cam.distance = 10.0;
 
-        // vedio streaming test
-        // let (mut VS_vopt, mut VS_cam, mut VS_scene, mut VS_context) = mujoco_camera::init_camera(&sim.simulation, 200, 400);
-        
         sim.simulation.control(&ctrl);
         loop {
             i += 1;
@@ -106,27 +111,46 @@ impl MujocoSim{
                         ctrl[i] = *val as f64;
                     }
                 }
-                println!("mixer_output {:?}", ctrl);
             }
             let ctrl_f64: Vec<f64> = ctrl.iter().map(|&x| x as f64).collect();
 
             sim.simulation.control(&ctrl);
 
-            // 2. 推进仿真一步
             sim.simulation.step();
 
             let pos = sim.simulation.qpos(); 
             sim.update_mj_sensor();
 
-            // if i == 100 {
-            //     mujoco_camera::get_camera_jpg(&sim.simulation, 200, 400, &mut VS_vopt, &mut VS_cam, &mut VS_scene, &mut VS_context);
-            // }
+            let frame = mujoco_vedio_streaming::update_mjscene(&sim.simulation, &mut VS_cam, &mut VS_vopt, &mut VS_scene, &mut VS_context);
+            stdin.write_all(&frame);
 
-            mujoco_ui::update_Mjscene(&sim.simulation, &mut window, &mut cam, &mut opt, &mut scn, &mut con);
+            // ui界面
+            // mujoco_ui::update_Mjscene(&sim.simulation, &mut window, &mut cam, &mut opt, &mut scn, &mut con);
 
-            // 控制时间步长
+            // time step
             std::thread::sleep(std::time::Duration::from_millis(10));
-            
+        }
+
+        unsafe {
+            mjv_freeScene(&mut VS_scene);
+            mjr_freeContext(&mut VS_context);
+        }
+
+        // 关闭 stdin
+        drop(stdin);
+
+        // 等待 FFmpeg 进程结束
+        match ffmpeg.wait_with_output() {
+            Ok(output) => {
+                if !output.status.success() {
+                    eprintln!("FFmpeg 错误: {}", String::from_utf8_lossy(&output.stderr));
+                    return;
+                }
+            }
+            Err(e) => {
+                eprintln!("错误: 等待 FFmpeg 失败: {}", e);
+                return;
+            }
         }
     }
 
