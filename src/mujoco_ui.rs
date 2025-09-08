@@ -42,7 +42,7 @@ pub fn init_glfw(sim: &Simulation) -> (mjvCamera_, mjvOption_, mjvScene_, mjrCon
 }
 
 
-pub fn update_Mjscene(
+pub fn update_mjscene(
     sim: &Simulation,
     window: &mut glfw::Window,
     cam: &mut mujoco_rs_sys::no_render::mjvCamera_,

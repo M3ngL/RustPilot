@@ -15,6 +15,8 @@ mod mujoco_sim;
 mod mujoco_vedio_streaming;
 #[cfg(feature = "mujoco")]
 mod mujoco_ui;
+#[cfg(feature = "mujoco")]
+mod mujoco_lidar;
 
 mod fake_linux_input;
 mod att_control;
