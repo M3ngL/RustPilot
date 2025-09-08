@@ -114,7 +114,18 @@ pub fn update_mjscene(
         // 读取像素
         sys::mjr_readPixels(rgb.as_mut_ptr(), depth.as_mut_ptr(), viewport, con);
 
-        rgb
+        // 垂直翻转图像
+        let mut flipped_rgb = vec![0u8; (width * height * 3) as usize] ;
+        for y in 0..height {
+            for x in 0..width {
+                let src_idx :usize = ((y * width + x) * 3) as usize;
+                let dst_idx :usize = (((height - 1 - y) * width + x) * 3) as usize;
+                flipped_rgb[dst_idx] = rgb[src_idx];
+                flipped_rgb[dst_idx + 1] = rgb[src_idx + 1];
+                flipped_rgb[dst_idx + 2] = rgb[src_idx + 2];
+            }
+        }
+        flipped_rgb
     }
 }
 
