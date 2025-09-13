@@ -12,9 +12,7 @@ mod gazebo_actuator;
 #[cfg(feature = "mujoco")]
 mod mujoco_sim;
 #[cfg(feature = "mujoco")]
-mod mujoco_vedio_streaming;
-#[cfg(feature = "mujoco")]
-mod mujoco_ui;
+mod mujoco_display;
 #[cfg(feature = "mujoco")]
 mod mujoco_lidar;
 

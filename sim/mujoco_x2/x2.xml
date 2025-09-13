@@ -34,7 +34,26 @@
     <body name="x2" pos="0 0 0.1" childclass="x2">
       <freejoint/>
       <!-- <camera name="track" pos="-1 0 .5" xyaxes="0 -1 0 1 0 2" mode="trackcom"/> -->
-      <camera name="onboard" pos="0.1 0 0.05" quat="0.7071 0 -0.7071 0" mode="fixed"/>
+      <!-- 前视相机 (朝 +x) -->
+      <camera name="front_cam" pos="0.2 0 0.05" quat="0.9239 0 -0.3827 0" mode="fixed"/>
+      <!-- 说明: 旋转 -45°绕y轴, 使相机稍微俯视前方 -->
+
+      <!-- 下视相机 (朝 -z) -->
+      <camera name="down_cam" pos="0 0 -0.05" quat="1 0 0 0" mode="fixed"/>
+      <!-- 说明: 四元数 (0 1 0 0) = 绕x轴旋转180°, 相机朝下 -->
+
+      <!-- 后视相机 (朝 -x) -->
+      <camera name="rear_cam" pos="-0.2 0 0.05" quat="0.7071 0 0.7071 0" mode="fixed"/>
+      <!-- 说明: 绕z轴旋转180°, 相机朝后 -->
+
+      <!-- 左视相机 (朝 +y) -->
+      <camera name="left_cam" pos="0 0.15 0.05" quat="0.7071 0 0 0.7071" mode="fixed"/>
+      <!-- 说明: 绕z轴旋转90°, 相机朝左 -->
+
+      <!-- 右视相机 (朝 -y) -->
+      <camera name="right_cam" pos="0 -0.15 0.05" quat="0.7071 0 0 -0.7071" mode="fixed"/>
+      <!-- 说明: 绕z轴旋转-90°, 相机朝右 -->
+
       <site name="imu" pos="0 0 .02"/>
       <geom material="phong3SG" mesh="X2_lowpoly" class="visual" quat="0 0 1 1"/>
       <geom class="collision" size=".06 .027 .02" pos=".04 0 .02"/>

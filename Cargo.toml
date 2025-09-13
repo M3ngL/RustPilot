@@ -24,6 +24,7 @@ mujoco-rust = { version = "0.0.6", optional = true}
 mujoco-rs-sys = {version = "0.0.4", optional = true}
 image = { version = "0.25.6", optional = true}
 glfw = { version = "0.51", optional = true}
+gl = { version = "0.14", optional = true}
 minifb = { version = "0.27", optional = true}
 
 [dev-dependencies]
@@ -35,7 +36,7 @@ rand = "0.8.4"
 [features]
 default = []
 gzsim = ["rpos/lock_step_enabled","gz","gz-msgs-common"]
-mujoco = ["mujoco-rust","mujoco-rs-sys","image","glfw", "minifb"]
+mujoco = ["mujoco-rust","mujoco-rs-sys","image","glfw", "minifb","gl"]
 
 
 [build-dependencies]

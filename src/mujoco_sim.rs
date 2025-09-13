@@ -16,8 +16,7 @@ use mujoco_rs_sys::render::*;
 use std::io::Write;
 use mujoco_rust::model::ObjType;
 
-use crate::mujoco_ui;
-use crate::mujoco_vedio_streaming;
+use crate::mujoco_display;
 use crate::mujoco_lidar;
 
 unsafe impl Send for MujocoSim {}
@@ -97,29 +96,33 @@ impl MujocoSim{
 
 
         // init lidar
-        let lidar_width = 800;
-        let lidar_height = 800;
-        let mut buffer: Vec<u32> = vec![0; lidar_width * lidar_height];
-        let mut lidar_window = minifb::Window::new(
-            "LiDAR Scan (Press ESC to exit)",
-            lidar_width,
-            lidar_height,
-            minifb::WindowOptions {
-                borderless: true,
-                ..minifb::WindowOptions::default()
-            },
-        )?;
+        // let lidar_width = 800;
+        // let lidar_height = 800;
+        // let mut buffer: Vec<u32> = vec![0; lidar_width * lidar_height];
+        // let mut lidar_window = minifb::Window::new(
+        //     "LiDAR Scan (Press ESC to exit)",
+        //     lidar_width,
+        //     lidar_height,
+        //     minifb::WindowOptions {
+        //         borderless: true,
+        //         ..minifb::WindowOptions::default()
+        //     },
+        // )?;
 
-        // ui
-        // let (mut cam, mut opt, mut scn, mut con, mut window) = mujoco_ui::init_glfw(&sim.simulation);
+        let front_cam = sim.simulation.model.name_to_id(ObjType::CAMERA, "front_cam").unwrap() as i32;
+        let down_cam = sim.simulation.model.name_to_id(ObjType::CAMERA, "down_cam").unwrap() as i32;
+        let rear_cam = sim.simulation.model.name_to_id(ObjType::CAMERA, "rear_cam").unwrap() as i32;
+        let right_cam = sim.simulation.model.name_to_id(ObjType::CAMERA, "right_cam").unwrap() as i32;
 
-        // vedio streaming
-        let mut ffmpeg = mujoco_vedio_streaming::init_ffmpeg();
+        let body_id = sim.simulation.model.name_to_id(ObjType::BODY, "x2").unwrap() as i32;
+
+        // ui 3rd viewer
+        let mut ui_state_3rd = mujoco_display::glfw_init(&sim.simulation, &[0x7FFFFFFF]);
+
+        // vedio streaming 1st viewer
+        let mut ffmpeg = mujoco_display::init_ffmpeg();
         let mut stdin = ffmpeg.stdin.take().unwrap(); // Take the stdin handle
-        let (mut window, mut vs_cam, mut vs_vopt, mut vs_scene, mut vs_context) = mujoco_vedio_streaming::init_glfw(&sim.simulation);
-
-        // distance between view and model
-        vs_cam.distance = 10.0;
+        let mut ui_state_1st = mujoco_display::glfw_init(&sim.simulation, &[down_cam, front_cam, right_cam, rear_cam]);
 
         sim.simulation.control(&ctrl);
         loop {
@@ -134,8 +137,8 @@ impl MujocoSim{
             let ctrl_f64: Vec<f64> = ctrl.iter().map(|&x| x as f64).collect();
     
             // update Lidar window
-            mujoco_lidar::update_lidar_buffer(lidar_width, lidar_height, &mut buffer, &sim.rf_ids, &sim.angles, &sim.simulation);
-            lidar_window.update_with_buffer(&buffer, lidar_width, lidar_height)?;
+            // mujoco_lidar::update_lidar_buffer(lidar_width, lidar_height, &mut buffer, &sim.rf_ids, &sim.angles, &sim.simulation);
+            // lidar_window.update_with_buffer(&buffer, lidar_width, lidar_height)?;
 
             sim.simulation.control(&ctrl);
 
@@ -144,19 +147,26 @@ impl MujocoSim{
             let pos = sim.simulation.qpos(); 
             sim.update_mj_sensor();
 
-            let frame = mujoco_vedio_streaming::update_mjscene(&sim.simulation, &mut vs_cam, &mut vs_vopt, &mut vs_scene, &mut vs_context);
+            let frame = mujoco_display::update_mjscene(&sim.simulation, &mut ui_state_1st);
             let _ = stdin.write_all(&frame);
 
             // ui界面
-            // mujoco_ui::update_mjscene(&sim.simulation, &mut window, &mut cam, &mut opt, &mut scn, &mut con);
+            mujoco_display::glfw_update_scene(&sim.simulation, &mut ui_state_3rd);
+            // mujoco_display::glfw_update_scene(&sim.simulation, &mut ui_state_1st);
 
             // time step
             std::thread::sleep(std::time::Duration::from_millis(10));
         }
 
         unsafe {
-            mjv_freeScene(&mut vs_scene);
-            mjr_freeContext(&mut vs_context);
+            for i in 0..ui_state_1st.scenes.len() {
+                mjv_freeScene(&mut ui_state_1st.scenes[i]);
+                mjr_freeContext(&mut ui_state_1st.contexts[i]);
+            }
+            for i in 0..ui_state_3rd.scenes.len() {
+                mjv_freeScene(&mut ui_state_3rd.scenes[i]);
+                mjr_freeContext(&mut ui_state_3rd.contexts[i]);
+            }
         }
 
         // 关闭 stdin
