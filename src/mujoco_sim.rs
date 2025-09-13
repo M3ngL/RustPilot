@@ -6,16 +6,12 @@ use rpos::ctor::ctor;
 use rpos::module::Module;
 use rpos::msg::{get_new_tx_of_message, get_new_rx_of_message};
 use std::sync::Arc;
-
+use std::io::Write;
 use std::sync::mpsc;
 use std::thread;
 use std::ptr;
 
-use mujoco_rust::Simulation;
-use mujoco_rs_sys::render::*;
-use std::io::Write;
 use mujoco_rust::model::ObjType;
-
 use crate::mujoco_display;
 use crate::mujoco_lidar;
 
@@ -92,22 +88,20 @@ impl MujocoSim{
         let mut mixer_rx = get_new_rx_of_message::<MixerOutputMsg>("mixer_output").unwrap();
         
         let mut ctrl: Vec<f64> = vec![0.0; actuator_num as usize];
-        let mut i = 0;
-
 
         // init lidar
-        // let lidar_width = 800;
-        // let lidar_height = 800;
-        // let mut buffer: Vec<u32> = vec![0; lidar_width * lidar_height];
-        // let mut lidar_window = minifb::Window::new(
-        //     "LiDAR Scan (Press ESC to exit)",
-        //     lidar_width,
-        //     lidar_height,
-        //     minifb::WindowOptions {
-        //         borderless: true,
-        //         ..minifb::WindowOptions::default()
-        //     },
-        // )?;
+        let lidar_width = 800;
+        let lidar_height = 800;
+        let mut buffer: Vec<u32> = vec![0; lidar_width * lidar_height];
+        let mut lidar_window = minifb::Window::new(
+            "LiDAR Scan",
+            lidar_width,
+            lidar_height,
+            minifb::WindowOptions {
+                borderless: true,
+                ..minifb::WindowOptions::default()
+            },
+        )?;
 
         let front_cam = sim.simulation.model.name_to_id(ObjType::CAMERA, "front_cam").unwrap() as i32;
         let down_cam = sim.simulation.model.name_to_id(ObjType::CAMERA, "down_cam").unwrap() as i32;
@@ -116,17 +110,16 @@ impl MujocoSim{
 
         let body_id = sim.simulation.model.name_to_id(ObjType::BODY, "x2").unwrap() as i32;
 
-        // ui 3rd viewer
+        // UI with 3rd-person view
         let mut ui_state_3rd = mujoco_display::glfw_init(&sim.simulation, &[0x7FFFFFFF]);
 
-        // vedio streaming 1st viewer
+        // vedio streaming with 1st-person view
         let mut ffmpeg = mujoco_display::init_ffmpeg();
-        let mut stdin = ffmpeg.stdin.take().unwrap(); // Take the stdin handle
+        let mut stdin = ffmpeg.stdin.take().unwrap();
         let mut ui_state_1st = mujoco_display::glfw_init(&sim.simulation, &[down_cam, front_cam, right_cam, rear_cam]);
 
         sim.simulation.control(&ctrl);
         loop {
-            i += 1;
             if let Some(mixer) = mixer_rx.try_read() {
                 for (i, val) in mixer.output.iter().enumerate() {
                     if i < ctrl.len() {
@@ -137,8 +130,8 @@ impl MujocoSim{
             let ctrl_f64: Vec<f64> = ctrl.iter().map(|&x| x as f64).collect();
     
             // update Lidar window
-            // mujoco_lidar::update_lidar_buffer(lidar_width, lidar_height, &mut buffer, &sim.rf_ids, &sim.angles, &sim.simulation);
-            // lidar_window.update_with_buffer(&buffer, lidar_width, lidar_height)?;
+            mujoco_lidar::update_lidar_buffer(lidar_width, lidar_height, &mut buffer, &sim.rf_ids, &sim.angles, &sim.simulation);
+            lidar_window.update_with_buffer(&buffer, lidar_width, lidar_height)?;
 
             sim.simulation.control(&ctrl);
 
@@ -150,29 +143,19 @@ impl MujocoSim{
             let frame = mujoco_display::update_mjscene(&sim.simulation, &mut ui_state_1st);
             let _ = stdin.write_all(&frame);
 
-            // ui界面
+            // ui render update
             mujoco_display::glfw_update_scene(&sim.simulation, &mut ui_state_3rd);
-            // mujoco_display::glfw_update_scene(&sim.simulation, &mut ui_state_1st);
 
-            // time step
+            // time step setting
             std::thread::sleep(std::time::Duration::from_millis(10));
         }
+        mujoco_display::free_resource(&mut ui_state_1st);
+        mujoco_display::free_resource(&mut ui_state_3rd);
 
-        unsafe {
-            for i in 0..ui_state_1st.scenes.len() {
-                mjv_freeScene(&mut ui_state_1st.scenes[i]);
-                mjr_freeContext(&mut ui_state_1st.contexts[i]);
-            }
-            for i in 0..ui_state_3rd.scenes.len() {
-                mjv_freeScene(&mut ui_state_3rd.scenes[i]);
-                mjr_freeContext(&mut ui_state_3rd.contexts[i]);
-            }
-        }
-
-        // 关闭 stdin
+        // close stdin
         drop(stdin);
 
-        // 等待 FFmpeg 进程结束
+        // wait for FFmpeg end
         match ffmpeg.wait_with_output() {
             Ok(output) => {
                 if !output.status.success() {
@@ -191,7 +174,6 @@ impl MujocoSim{
 
     fn new(xml_filename: &str) -> Arc<Self> {
         let model = mujoco_rust::Model::from_xml(xml_filename).unwrap();
-        // let mj_model = unsafe { *model.ptr() };
         let simulation = mujoco_rust::Simulation::new(model.clone());
         
         // Lidar
@@ -202,8 +184,9 @@ impl MujocoSim{
             let id = model.name_to_id(ObjType::SITE, &sensor_name).unwrap();
             rf_ids.push(id as u16);
         }
+
         let sim = Arc::new_cyclic(|_| {
-            let a = MujocoSim {
+            let tmp = MujocoSim {
                 model: model.clone(),
                 simulation: simulation,
                 gyro_tx: get_new_tx_of_message("gyro").unwrap(),
@@ -212,7 +195,7 @@ impl MujocoSim{
                 rf_ids: rf_ids,
                 angles: angles
             };
-            a
+            tmp
         });
         sim
     }
@@ -229,7 +212,7 @@ pub fn init_mujoco_sim(_argc: u32, _argv: *const &str){
 
     std::thread::spawn(move || {
         if let Err(e) = MujocoSim::mujoco_sim_event_loop(sim, actuator_num) {
-            eprintln!("模拟线程错误: {:?}", e);
+            eprintln!("Simulated thread error: {:?}", e);
         }
     });
 }

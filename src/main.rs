@@ -9,11 +9,11 @@ mod param;
 mod gazebo_sim;
 #[cfg(feature = "gzsim")]
 mod gazebo_actuator;
-#[cfg(feature = "mujoco")]
+#[cfg(feature = "mjsim")]
 mod mujoco_sim;
-#[cfg(feature = "mujoco")]
+#[cfg(feature = "mjsim")]
 mod mujoco_display;
-#[cfg(feature = "mujoco")]
+#[cfg(feature = "mjsim")]
 mod mujoco_lidar;
 
 mod fake_linux_input;
@@ -54,7 +54,9 @@ fn main() {
     let cli = Cli::parse();
 
     const SOCKET_PATH: &str = "./rpsocket";
-    // unsafe {assert_eq!(libc::mlockall(1 | 2),0)};
+    
+    #[cfg(not(feature = "mjsim"))]
+    unsafe {assert_eq!(libc::mlockall(1 | 2),0)};
 
     if cli.server {
         let hello_txt = r"

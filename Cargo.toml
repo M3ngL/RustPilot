@@ -36,7 +36,7 @@ rand = "0.8.4"
 [features]
 default = []
 gzsim = ["rpos/lock_step_enabled","gz","gz-msgs-common"]
-mujoco = ["mujoco-rust","mujoco-rs-sys","image","glfw", "minifb","gl"]
+mjsim = ["mujoco-rust","mujoco-rs-sys","image","glfw", "minifb","gl"]
 
 
 [build-dependencies]

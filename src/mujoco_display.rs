@@ -15,9 +15,8 @@ pub struct UIState {
     pub cameras: Vec<render::mjvCamera_>,
     pub opt: render::mjvOption_,
     pub scenes: Vec<render::mjvScene_>,
-    pub contexts: Vec<render::mjrContext_>, // 改为 Vec 以支持多个上下文
+    pub contexts: Vec<render::mjrContext_>,
     pub window: glfw::Window,
-    // pub events: glfw::Receiver<(f64, glfw::WindowEvent)>,
 }
 
 pub fn glfw_init(simulation: &Simulation, cam_ids: &[i32]) -> UIState {
@@ -26,14 +25,14 @@ pub fn glfw_init(simulation: &Simulation, cam_ids: &[i32]) -> UIState {
 
     let (mut window, events) = if cam_ids[0] == 0x7FFFFFFF {
         glfw.create_window(1200, 900, "MuJoCo UI", glfw::WindowMode::Windowed)
-            .expect("无法创建 GLFW 窗口")
+            .expect("Unable to create visible GLFW window.")
     } else {
         glfw.window_hint(glfw::WindowHint::Visible(false));
         glfw.create_window(640, 480, "hidden", glfw::WindowMode::Windowed)
-            .expect("无法创建 GLFW 窗口")
+            .expect("Unable to create hidden GLFW window.")
     };
 
-    // 设置窗口为当前上下文
+    // window settings init
     window.make_current();
     window.set_key_polling(true);
     window.set_cursor_pos_polling(true);
@@ -42,7 +41,7 @@ pub fn glfw_init(simulation: &Simulation, cam_ids: &[i32]) -> UIState {
 
     gl::load_with(|symbol| window.get_proc_address(symbol) as *const _);
 
-    // 初始化 MuJoCo 结构
+    // init UIstate
     let mut cameras = Vec::new();
     let mut scenes = Vec::new();
     let mut contexts = Vec::new();
@@ -54,22 +53,21 @@ pub fn glfw_init(simulation: &Simulation, cam_ids: &[i32]) -> UIState {
         let mut con = render::mjrContext_::default();
 
         unsafe {
+            // init camera & scene
             no_render::mjv_defaultCamera(&mut cam);
             render::mjv_defaultScene(&mut scn);
             render::mjr_defaultContext(&mut con);
 
-            // 为每个相机初始化场景和上下文
             no_render::mjv_makeScene(simulation.model.ptr(), &mut scn, 2000);
             render::mjr_makeContext(simulation.model.ptr(), &mut con, 200);
         }
         if cam_id == 0x7FFFFFFF {
-            cam.type_ = 1; // 自由相机
-            cam.trackbodyid = 1; // 设置跟踪的物体 ID
-            // cam.fixedcamid = -1; // 跟踪模式不需要 fixedcamid
-            cam.distance = 5.0; // 设置初始距离
+            cam.type_ = 1; // free viewport
+            cam.trackbodyid = 1; // Set tracked object ID
+            cam.distance = 5.0;
         } else {
             cam.fixedcamid = cam_id;
-            cam.type_ = 2; // 固定相机
+            cam.type_ = 2; // fix camera
         }
 
         cameras.push(cam);
@@ -87,14 +85,13 @@ pub fn glfw_init(simulation: &Simulation, cam_ids: &[i32]) -> UIState {
         scenes,
         contexts,
         window,
-        // events, // 返回 events 以供主循环使用
     }
 }
 
 pub fn glfw_update_scene(simulation: &Simulation, ui_state: &mut UIState) {
     ui_state.window.make_current();
     unsafe {
-        // 获取窗口大小
+        // get window size
         let (width, height) = ui_state.window.get_framebuffer_size();
         let num_cameras = ui_state.cameras.len().min(4);
         let cols = if num_cameras < 2 { 1 } else { 2 };
@@ -102,12 +99,11 @@ pub fn glfw_update_scene(simulation: &Simulation, ui_state: &mut UIState) {
         let sub_window_width = width / cols as i32;
         let sub_window_height = height / rows as i32;
 
-        // 清除帧缓冲区
+        // clear buffer
         gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
 
-        // 更新并渲染每个场景
+        // update & render
         for i in 0..num_cameras {
-            // 更新当前相机的场景
             no_render::mjv_updateScene(
                 simulation.model.ptr(),
                 simulation.state.ptr(),
@@ -118,11 +114,11 @@ pub fn glfw_update_scene(simulation: &Simulation, ui_state: &mut UIState) {
                 &mut ui_state.scenes[i],
             );
 
-            // 计算网格中的行和列
-            let row = i / cols; // 行索引
-            let col = i % cols; // 列索引
+            // calc sub window's pos in the main window
+            let row = i / cols;
+            let col = i % cols;
 
-            // 定义当前子窗口的视口
+            // define sub window viewport
             let viewport = render::mjrRect_ {
                 left: col as i32 * sub_window_width,
                 bottom: (rows - 1 - row) as i32 * sub_window_height, // 从底部开始，翻转行顺序
@@ -130,11 +126,11 @@ pub fn glfw_update_scene(simulation: &Simulation, ui_state: &mut UIState) {
                 height: sub_window_height,
             };
 
-            // 在视口中渲染场景
+            // render scene
             render::mjr_render(viewport, &mut ui_state.scenes[i], &mut ui_state.contexts[i]);
         }
 
-        // 交换缓冲区以显示
+        // swap buffer to display render scene
         ui_state.window.swap_buffers();
     }
 }
@@ -167,7 +163,7 @@ pub fn init_ffmpeg() -> std::process::Child {
 pub fn update_mjscene(simulation: &Simulation, ui_state: &mut UIState) -> Vec<u8> {
     ui_state.window.make_current();
     unsafe {
-        // 获取窗口大小
+        // get window size
         let (width, height) = ui_state.window.get_framebuffer_size();
         let num_cameras = ui_state.cameras.len().min(4);
         let cols = if num_cameras < 2 { 1 } else { 2 };
@@ -175,12 +171,11 @@ pub fn update_mjscene(simulation: &Simulation, ui_state: &mut UIState) -> Vec<u8
         let sub_window_width = width / cols as i32;
         let sub_window_height = height / rows as i32;
 
-        // 清除帧缓冲区
+        // clear buffer
         gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
 
-        // 更新并渲染每个场景
+        // update & render
         for i in 0..num_cameras {
-            // 更新当前相机的场景
             no_render::mjv_updateScene(
                 simulation.model.ptr(),
                 simulation.state.ptr(),
@@ -190,12 +185,11 @@ pub fn update_mjscene(simulation: &Simulation, ui_state: &mut UIState) -> Vec<u8
                 0xFFFFFF,
                 &mut ui_state.scenes[i],
             );
+            // calc sub window's pos in the main window
+            let row = i / cols; 
+            let col = i % cols;
 
-            // 计算网格中的行和列
-            let row = i / cols; // 行索引
-            let col = i % cols; // 列索引
-
-            // 定义当前子窗口的视口
+            // sub window viewport
             let viewport = render::mjrRect_ {
                 left: col as i32 * sub_window_width,
                 bottom: (rows - 1 - row) as i32 * sub_window_height, // 从底部开始，翻转行顺序
@@ -203,14 +197,14 @@ pub fn update_mjscene(simulation: &Simulation, ui_state: &mut UIState) -> Vec<u8
                 height: sub_window_height,
             };
 
-            // 在视口中渲染场景
+            // render the scene
             render::mjr_render(viewport, &mut ui_state.scenes[i], &mut ui_state.contexts[i]);
         }
 
-        // 分配 RGB 缓冲区
+        // 
         let mut rgb = vec![0u8; (width * height * 3) as usize];
 
-        // 定义整个窗口的视口
+        // define full viewport rather than a partial viewport
         let full_viewport = render::mjrRect_ {
             left: 0,
             bottom: 0,
@@ -220,10 +214,10 @@ pub fn update_mjscene(simulation: &Simulation, ui_state: &mut UIState) -> Vec<u8
 
         gl::PixelStorei(gl::PACK_ALIGNMENT, 1);
 
-        // 读取整个窗口的像素
+        // read the main window's Pixels
         render::mjr_readPixels(rgb.as_mut_ptr(), ptr::null_mut(), full_viewport, &mut ui_state.contexts[0]);
 
-        // 垂直翻转图像
+        // flips the image
         let mut flipped_rgb = vec![0u8; (width * height * 3) as usize];
         for y in 0..height {
             for x in 0..width {
@@ -235,5 +229,14 @@ pub fn update_mjscene(simulation: &Simulation, ui_state: &mut UIState) -> Vec<u8
             }
         }
         flipped_rgb
+    }
+}
+
+pub fn free_resource(ui_state: &mut UIState){
+    unsafe {
+        for i in 0..ui_state.scenes.len() {
+            render::mjv_freeScene(&mut ui_state.scenes[i]);
+            render::mjr_freeContext(&mut ui_state.contexts[i]);
+        }
     }
 }
