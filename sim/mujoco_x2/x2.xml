@@ -1,7 +1,7 @@
 <mujoco model="Skydio X2">
   <compiler autolimits="true" assetdir="assets"/>
 
-  <option timestep="0.01" density="1.225" viscosity="1.8e-5"/>
+  <option timestep="0.02" density="1.225" viscosity="1.8e-5"/>
 
   <default>
     <default class="x2">
@@ -33,26 +33,20 @@
     <light name="spotlight" mode="targetbodycom" target="x2" pos="0 -1 2"/>
     <body name="x2" pos="0 0 0.1" childclass="x2">
       <freejoint/>
-      <!-- <camera name="track" pos="-1 0 .5" xyaxes="0 -1 0 1 0 2" mode="trackcom"/> -->
-      <!-- 前视相机 (朝 +x) -->
+      <!-- X-forward looking camera -->
       <camera name="front_cam" pos="0.2 0 0.05" quat="0.9239 0 -0.3827 0" mode="fixed"/>
-      <!-- 说明: 旋转 -45°绕y轴, 使相机稍微俯视前方 -->
 
-      <!-- 下视相机 (朝 -z) -->
+      <!-- Z-downward facing camera -->
       <camera name="down_cam" pos="0 0 -0.05" quat="1 0 0 0" mode="fixed"/>
-      <!-- 说明: 四元数 (0 1 0 0) = 绕x轴旋转180°, 相机朝下 -->
 
-      <!-- 后视相机 (朝 -x) -->
+      <!-- X-rear view camera -->
       <camera name="rear_cam" pos="-0.2 0 0.05" quat="0.7071 0 0.7071 0" mode="fixed"/>
-      <!-- 说明: 绕z轴旋转180°, 相机朝后 -->
 
-      <!-- 左视相机 (朝 +y) -->
+      <!-- Y-left-looking camera -->
       <camera name="left_cam" pos="0 0.15 0.05" quat="0.7071 0 0 0.7071" mode="fixed"/>
-      <!-- 说明: 绕z轴旋转90°, 相机朝左 -->
 
-      <!-- 右视相机 (朝 -y) -->
+      <!-- Y-right-looking camera -->
       <camera name="right_cam" pos="0 -0.15 0.05" quat="0.7071 0 0 -0.7071" mode="fixed"/>
-      <!-- 说明: 绕z轴旋转-90°, 相机朝右 -->
 
       <site name="imu" pos="0 0 .02"/>
       <geom material="phong3SG" mesh="X2_lowpoly" class="visual" quat="0 0 1 1"/>
