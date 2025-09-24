@@ -5,13 +5,11 @@ use rpos::channel::Sender;
 use rpos::ctor::ctor;
 use rpos::module::Module;
 use rpos::msg::{get_new_tx_of_message, get_new_rx_of_message};
-// use std::sync::Arc;
 use std::io::Write;
-use std::sync::mpsc;
 use std::thread;
 use std::ptr;
 
-use std::sync::{Arc, RwLock};
+use std::sync::{mpsc, Arc, RwLock};
 
 use mujoco_rust::model::ObjType;
 use crate::mujoco_display;
@@ -136,9 +134,7 @@ impl MujocoSim{
         std::thread::spawn(move || {
             let mut ctrl: Vec<f64> = vec![0.0; actuator_num as usize];
             let mut mixer_rx = get_new_rx_of_message::<MixerOutputMsg>("mixer_output").unwrap();
-            // let mut ctrl: [f64; 4] = [4.5, 4.5, 4.5, 4.5];
             while running_ctrl.load(Ordering::Relaxed) {
-                // println!("123");
                 if let Some(mixer) = mixer_rx.try_read() {
                     for (i, val) in mixer.output.iter().enumerate() {
                         if i < ctrl.len() {
@@ -167,7 +163,6 @@ impl MujocoSim{
                     sim_guard.simulation.sensordata()
                 ) 
             };
-            // println!("567");
             // update Lidar window
             mujoco_lidar::update_lidar_buffer(lidar_width, lidar_height, &mut buffer, &rf_ids, &angles, &sensordata);
             lidar_window.update_with_buffer(&buffer, lidar_width, lidar_height)?;
@@ -232,7 +227,6 @@ pub fn init_mujoco_sim(_argc: u32, _argv: *const &str){
     assert!(_argc == 2);
     let argv = unsafe { slice::from_raw_parts(_argv, _argc as usize) };
     let sim = Arc::new(RwLock::new(MujocoSim::new(argv[1])));
-    // let sim = MujocoSim::new(argv[1]);
     let sim_guard = sim.read().unwrap();
     let actuator_num = unsafe { (*sim_guard.simulation.model.ptr()).nu as usize};
     
