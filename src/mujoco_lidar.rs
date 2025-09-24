@@ -20,7 +20,7 @@ pub fn update_lidar_buffer(
     buffer: &mut [u32],
     rf_ids: &[u16],
     angles: &[u16],
-    simulation: &mujoco_rust::Simulation,
+    sensordata: &Vec<f64>
 ) {
     // Lidar coordinate line
     let center_x = lidar_width as f64 / 2.0;
@@ -47,7 +47,7 @@ pub fn update_lidar_buffer(
 
     let mut points = Vec::new();
     for (i, &id) in rf_ids.iter().enumerate() {
-        let distance = simulation.sensordata()[(id +1) as usize];
+        let distance = sensordata[(id +1) as usize];
         let theta = angles[i] as f64 * PI / 180.0;
         if distance >= 0.0 && distance <= 10.0 {
             points.push((theta, distance));
@@ -58,7 +58,7 @@ pub fn update_lidar_buffer(
     for (theta, r) in &points {
         let x = center_x + (r * pixels_per_meter) * theta.cos();
         let y = center_y + (r * pixels_per_meter) * theta.sin();
-        draw_circle(buffer, lidar_width, lidar_height, x, y, 3.0, 0xFF000000);
+        draw_circle(buffer, lidar_width, lidar_height, x, y, 3.0, 0xFF0000);
     }
 }
 

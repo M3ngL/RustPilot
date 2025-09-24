@@ -6,7 +6,6 @@ use glfw::Context;
 use gl;
 use mujoco_rust::Simulation;
 use std::ptr;
-
 use mujoco_rust::model::ObjType;
 use image::{RgbImage, ImageBuffer};
 use std::process::{Command, Stdio};
@@ -67,7 +66,7 @@ pub fn glfw_init(simulation: &Simulation, cam_ids: &[i32]) -> UIState {
             cam.distance = 5.0;
         } else {
             cam.fixedcamid = cam_id;
-            cam.type_ = 2; // fix camera
+            cam.type_ = 2; // fixed camera
         }
 
         cameras.push(cam);
@@ -88,7 +87,7 @@ pub fn glfw_init(simulation: &Simulation, cam_ids: &[i32]) -> UIState {
     }
 }
 
-pub fn glfw_update_scene(simulation: &Simulation, ui_state: &mut UIState) {
+pub fn glfw_update_scene(sim_model: *mut no_render::mjModel_, sim_state: *mut no_render::mjData_, ui_state: &mut UIState) {
     ui_state.window.make_current();
     unsafe {
         // get window size
@@ -105,8 +104,8 @@ pub fn glfw_update_scene(simulation: &Simulation, ui_state: &mut UIState) {
         // update & render
         for i in 0..num_cameras {
             no_render::mjv_updateScene(
-                simulation.model.ptr(),
-                simulation.state.ptr(),
+                sim_model,
+                sim_state,
                 &ui_state.opt,
                 ptr::null(),
                 &mut ui_state.cameras[i],
@@ -160,7 +159,7 @@ pub fn init_ffmpeg() -> std::process::Child {
     ffmpeg
 }
 
-pub fn update_mjscene(simulation: &Simulation, ui_state: &mut UIState) -> Vec<u8> {
+pub fn update_mjscene(sim_model: *mut no_render::mjModel_, sim_state: *mut no_render::mjData_, ui_state: &mut UIState) -> Vec<u8> {
     ui_state.window.make_current();
     unsafe {
         // get window size
@@ -170,15 +169,14 @@ pub fn update_mjscene(simulation: &Simulation, ui_state: &mut UIState) -> Vec<u8
         let rows = if num_cameras <= 2 { 1 } else { 2 };
         let sub_window_width = width / cols as i32;
         let sub_window_height = height / rows as i32;
-
         // clear buffer
         gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
 
         // update & render
         for i in 0..num_cameras {
             no_render::mjv_updateScene(
-                simulation.model.ptr(),
-                simulation.state.ptr(),
+                sim_model,
+                sim_state,
                 &ui_state.opt,
                 ptr::null(),
                 &mut ui_state.cameras[i],
