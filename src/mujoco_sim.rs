@@ -5,17 +5,14 @@ use rpos::channel::Sender;
 use rpos::ctor::ctor;
 use rpos::module::Module;
 use rpos::msg::{get_new_tx_of_message, get_new_rx_of_message};
+use std::sync::Arc;
 use std::io::Write;
 use std::thread;
 use std::ptr;
 
-use std::sync::{mpsc, Arc, RwLock};
-
 use mujoco_rust::model::ObjType;
 use crate::mujoco_display;
 use crate::mujoco_lidar;
-use std::sync::atomic::{AtomicBool, Ordering};
-
 
 unsafe impl Send for MujocoSim {}
 unsafe impl Sync for MujocoSim {}
@@ -86,11 +83,14 @@ impl MujocoSim{
 
     }
 
-    fn mujoco_sim_event_loop(sim: Arc<RwLock<MujocoSim>>, actuator_num: usize) -> Result<(), Box<dyn std::error::Error>> {
+    fn mujoco_sim_event_loop(sim: Arc<MujocoSim>, actuator_num: usize) -> Result<(), Box<dyn std::error::Error>> {
+        let mut mixer_rx = get_new_rx_of_message::<MixerOutputMsg>("mixer_output").unwrap();
         
+        let mut ctrl: Vec<f64> = vec![0.0; actuator_num as usize];
+
         // init lidar
-        let lidar_width = 400;
-        let lidar_height = 400;
+        let lidar_width = 800;
+        let lidar_height = 800;
         let mut buffer: Vec<u32> = vec![0; lidar_width * lidar_height];
         let mut lidar_window = minifb::Window::new(
             "LiDAR Scan",
@@ -102,77 +102,51 @@ impl MujocoSim{
             },
         )?;
 
-        // init render settings
-        let (mut ui_state_3rd, mut ui_state_1st) = {
-            let sim_for_render = Arc::clone(&sim);
-            let sim_guard = sim_for_render.read().unwrap();
-            let front_cam = sim_guard.simulation.model.name_to_id(ObjType::CAMERA, "front_cam").unwrap() as i32;
-            let down_cam = sim_guard.simulation.model.name_to_id(ObjType::CAMERA, "down_cam").unwrap() as i32;
-            let rear_cam = sim_guard.simulation.model.name_to_id(ObjType::CAMERA, "rear_cam").unwrap() as i32;
-            let right_cam = sim_guard.simulation.model.name_to_id(ObjType::CAMERA, "right_cam").unwrap() as i32;
+        let front_cam = sim.simulation.model.name_to_id(ObjType::CAMERA, "front_cam").unwrap() as i32;
+        let down_cam = sim.simulation.model.name_to_id(ObjType::CAMERA, "down_cam").unwrap() as i32;
+        let rear_cam = sim.simulation.model.name_to_id(ObjType::CAMERA, "rear_cam").unwrap() as i32;
+        let right_cam = sim.simulation.model.name_to_id(ObjType::CAMERA, "right_cam").unwrap() as i32;
 
-            // UI with 3rd-person view
-            let mut ui_state_3rd = mujoco_display::glfw_init(&sim_guard.simulation, &[0x7FFFFFFF]);
+        let body_id = sim.simulation.model.name_to_id(ObjType::BODY, "x2").unwrap() as i32;
 
-            // vedio streaming with 1st-person view
-            // let mut ui_state_1st = mujoco_display::glfw_init(&sim.simulation, &[down_cam, front_cam, right_cam, rear_cam]);
-            let mut ui_state_1st = mujoco_display::glfw_init(&sim_guard.simulation, &[down_cam]);
-            (ui_state_3rd, ui_state_1st)
-        };
+        // UI with 3rd-person view
+        let mut ui_state_3rd = mujoco_display::glfw_init(&sim.simulation, &[0x7FFFFFFF]);
 
-        // init ffmpeg
+        // vedio streaming with 1st-person view
         let mut ffmpeg = mujoco_display::init_ffmpeg();
         let mut stdin = ffmpeg.stdin.take().unwrap();
+        let mut ui_state_1st = mujoco_display::glfw_init(&sim.simulation, &[down_cam, front_cam, right_cam, rear_cam]);
 
-        // init process control handle
-        let running = Arc::new(AtomicBool::new(true));
-        let running_ctrl = Arc::clone(&running);
-        let running_render = Arc::clone(&running);
-        
-        // ctrl loop
-        let sim_for_ctrl = Arc::clone(&sim);
-        std::thread::spawn(move || {
-            let mut ctrl: Vec<f64> = vec![0.0; actuator_num as usize];
-            let mut mixer_rx = get_new_rx_of_message::<MixerOutputMsg>("mixer_output").unwrap();
-            while running_ctrl.load(Ordering::Relaxed) {
-                if let Some(mixer) = mixer_rx.try_read() {
-                    for (i, val) in mixer.output.iter().enumerate() {
-                        if i < ctrl.len() {
-                            ctrl[i] = *val as f64;
-                        }
+        sim.simulation.control(&ctrl);
+        loop {
+            if let Some(mixer) = mixer_rx.try_read() {
+                for (i, val) in mixer.output.iter().enumerate() {
+                    if i < ctrl.len() {
+                        ctrl[i] = *val as f64;
                     }
                 }
-                let mut sim_guard = sim_for_ctrl.write().unwrap();
-                sim_guard.simulation.control(&ctrl);
-                sim_guard.simulation.step();
-                sim_guard.update_mj_sensor();
-                std::thread::sleep(std::time::Duration::from_millis(400));
             }
-        });
-
-        // render loop
-        let sim_for_render = Arc::clone(&sim);
-        while running_render.load(Ordering::Relaxed) {
-            let (sim_model, sim_state, rf_ids, angles, sensordata) = {
-                let sim_guard = sim_for_render.read().unwrap();
-                (
-                    sim_guard.simulation.model.ptr(), 
-                    sim_guard.simulation.state.ptr(),
-                    sim_guard.rf_ids.clone(),
-                    sim_guard.angles.clone(),
-                    sim_guard.simulation.sensordata()
-                ) 
-            };
+            let ctrl_f64: Vec<f64> = ctrl.iter().map(|&x| x as f64).collect();
+    
             // update Lidar window
-            mujoco_lidar::update_lidar_buffer(lidar_width, lidar_height, &mut buffer, &rf_ids, &angles, &sensordata);
+            mujoco_lidar::update_lidar_buffer(lidar_width, lidar_height, &mut buffer, &sim.rf_ids, &sim.angles, &sim.simulation);
             lidar_window.update_with_buffer(&buffer, lidar_width, lidar_height)?;
 
-            // update scene
-            let frame = mujoco_display::update_mjscene(sim_model, sim_state, &mut ui_state_1st);
+            sim.simulation.control(&ctrl);
+
+            sim.simulation.step();
+
+            let pos = sim.simulation.qpos(); 
+            sim.update_mj_sensor();
+
+            let frame = mujoco_display::update_mjscene(&sim.simulation, &mut ui_state_1st);
             let _ = stdin.write_all(&frame);
 
             // ui render update
-            mujoco_display::glfw_update_scene(sim_model, sim_state, &mut ui_state_3rd);
+            mujoco_display::glfw_update_scene(&sim.simulation, &mut ui_state_3rd);
+
+            // time step setting
+            std::thread::sleep(std::time::Duration::from_millis(10));
         }
         mujoco_display::free_resource(&mut ui_state_1st);
         mujoco_display::free_resource(&mut ui_state_3rd);
@@ -197,7 +171,7 @@ impl MujocoSim{
     }
 
 
-    fn new(xml_filename: &str) -> Self {
+    fn new(xml_filename: &str) -> Arc<Self> {
         let model = mujoco_rust::Model::from_xml(xml_filename).unwrap();
         let simulation = mujoco_rust::Simulation::new(model.clone());
         
@@ -210,15 +184,19 @@ impl MujocoSim{
             rf_ids.push(id as u16);
         }
 
-        Self {
-            model,
-            simulation,
-            gyro_tx: get_new_tx_of_message("gyro").unwrap(),
-            acc_tx: get_new_tx_of_message("acc").unwrap(),
-            attitude_tx: get_new_tx_of_message("attitude").unwrap(),
-            rf_ids,
-            angles,
-        }
+        let sim = Arc::new_cyclic(|_| {
+            let tmp = MujocoSim {
+                model: model.clone(),
+                simulation: simulation,
+                gyro_tx: get_new_tx_of_message("gyro").unwrap(),
+                acc_tx: get_new_tx_of_message("acc").unwrap(),
+                attitude_tx: get_new_tx_of_message("attitude").unwrap(),
+                rf_ids: rf_ids,
+                angles: angles
+            };
+            tmp
+        });
+        sim
     }
     
 }
@@ -226,12 +204,11 @@ impl MujocoSim{
 pub fn init_mujoco_sim(_argc: u32, _argv: *const &str){
     assert!(_argc == 2);
     let argv = unsafe { slice::from_raw_parts(_argv, _argc as usize) };
-    let sim = Arc::new(RwLock::new(MujocoSim::new(argv[1])));
-    let sim_guard = sim.read().unwrap();
-    let actuator_num = unsafe { (*sim_guard.simulation.model.ptr()).nu as usize};
+    let sim = MujocoSim::new(argv[1]);
+    let actuator_num = unsafe { (*sim.simulation.model.ptr()).nu as usize};
     
     println!("MujocoSim inited!");
-    let sim = Arc::clone(&sim);
+
     std::thread::spawn(move || {
         if let Err(e) = MujocoSim::mujoco_sim_event_loop(sim, actuator_num) {
             eprintln!("Simulated thread error: {:?}", e);
